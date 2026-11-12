@@ -1,0 +1,44 @@
+name: Cache Black formatter wheels
+on:
+  push:
+    paths:
+      - '.github/workflows/black-format-tools.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download pinned formatter and record wheel hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p formatter/wheels
+          python -m pip download --only-binary=:all: --dest formatter/wheels black==25.9.0
+          python - <<'PY'
+          import hashlib, json, pathlib, zipfile
+          rows=[]
+          for p in sorted(pathlib.Path('formatter/wheels').glob('*.whl')):
+              with zipfile.ZipFile(p) as z:
+                  name=next(n for n in z.namelist() if n.endswith('.dist-info/METADATA'))
+                  lines=z.read(name).decode().splitlines()
+                  meta={k:v.strip() for line in lines if ': ' in line for k,v in [line.split(': ',1)] if k in ('Name','Version')}
+              rows.append(dict(name=meta['Name'],version=meta['Version'],file=str(p),size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+          pathlib.Path('formatter/manifest.json').write_text(json.dumps(rows,indent=2))
+          PY
+          sha256sum formatter/wheels/* > formatter/SHA256SUMS.txt
+          tar -czf black-25.9.0-linux-x64-cp313.tar.gz formatter
+          test $(stat -c %s black-25.9.0-linux-x64-cp313.tar.gz) -lt 104857600
+          sha256sum black-25.9.0-linux-x64-cp313.tar.gz
+          ls -l black-25.9.0-linux-x64-cp313.tar.gz
+          cat formatter/manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: black-25.9.0-linux-x64-cp313
+          path: black-25.9.0-linux-x64-cp313.tar.gz
+          retention-days: 400
+          if-no-files-found: error
