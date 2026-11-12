@@ -1,0 +1,39 @@
+name: Temporary fetch KFB analysis tools
+on:
+  push:
+    paths:
+      - '.github/workflows/kfb-tools-fetch.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch small public KFB toolset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --depth=1 --sparse https://github.com/DianSuWitss/kfb-assetbundle-decrypt.git upstream
+          cd upstream
+          git sparse-checkout set kfb/05_tools
+          cd ..
+          mkdir -p kfb-tools
+          cp upstream/kfb/05_tools/kfb_static_decrypt.js kfb-tools/
+          cp upstream/kfb/05_tools/kfb_schema_decoder.js kfb-tools/
+          cp upstream/kfb/05_tools/kfb_readable_adapter.js kfb-tools/
+          cp upstream/kfb/05_tools/kfb_schema.json kfb-tools/
+          cp upstream/kfb/05_tools/kfb_dump_layout.json kfb-tools/
+          cp upstream/kfb/05_tools/README_READABLE_FORMAT.md kfb-tools/
+          printf '%s\n' "$(git -C upstream rev-parse HEAD)" > kfb-tools/UPSTREAM_COMMIT
+          sha256sum kfb-tools/* > SHA256SUMS.txt
+          tar -czf kfb-tools.tar.gz kfb-tools SHA256SUMS.txt
+          sha256sum kfb-tools.tar.gz
+          ls -lh kfb-tools.tar.gz
+      - name: Upload short-lived artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kfb-tools-temporary
+          path: kfb-tools.tar.gz
+          retention-days: 1
+          if-no-files-found: error
