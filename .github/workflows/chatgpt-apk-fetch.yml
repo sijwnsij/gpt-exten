@@ -1,0 +1,54 @@
+name: Temporary ChatGPT Android APK fetch for static analysis
+on:
+  push:
+    paths:
+      - '.github/workflows/chatgpt-apk-fetch.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch public ChatGPT APK package
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          urls=(
+            'https://d.apkpure.com/b/XAPK/com.openai.chatgpt?version=latest'
+            'https://d.apkpure.com/b/XAPK/com.openai.chatgpt?version=1.2026.314'
+            'https://d.apkpure.com/b/APK/com.openai.chatgpt?version=latest'
+          )
+          for index in "${!urls[@]}"; do
+            url="${urls[$index]}"
+            echo "Trying source ${index}" | tee -a out/download-log.txt
+            curl -fSL --retry 2 --connect-timeout 18 --max-time 220 -A 'Mozilla/5.0' -D out/headers.txt -o out/ChatGPT-Android-2026-314.xapk "$url" 2>>out/download-log.txt
+            if python3 -c "import os,zipfile,sys; p='out/ChatGPT-Android-2026-314.xapk'; sys.exit(0 if os.path.exists(p) and os.stat(p).st_size>30000000 and zipfile.is_zipfile(p) else 1)"; then
+              echo "Downloaded valid ZIP based APK/XAPK package from source ${index}" | tee -a out/download-log.txt
+              break
+            fi
+            rm -f out/ChatGPT-Android-2026-314.xapk
+          done
+          if [ -f out/ChatGPT-Android-2026-314.xapk ]; then
+            sha256sum out/ChatGPT-Android-2026-314.xapk | tee out/SHA256SUMS.txt
+            python3 - <<'PY'
+          import zipfile,json,os
+          p='out/ChatGPT-Android-2026-314.xapk'
+          with zipfile.ZipFile(p) as z:
+            names=z.namelist()
+            print('Entries:',len(names),'size:',os.stat(p).st_size)
+            for x in names[:35]:print(x)
+            for x in ('manifest.json','info.json'):
+              if x in names:
+                d=z.read(x)
+                print(x, d[:3000].decode('utf-8','replace'))
+          PY
+          fi
+      - name: Upload short-lived analysis artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-android-apk-temporary
+          path: out/
+          retention-days: 1
+          if-no-files-found: error
