@@ -45,6 +45,24 @@ jobs:
                 print(x, d[:3000].decode('utf-8','replace'))
           PY
           fi
+      - name: Probe alternate public mirrors
+        shell: bash
+        run: |
+          mkdir -p out
+          for url in \
+            'https://chatgpt.en.uptodown.com/android/download' \
+            'https://www.apkmirror.com/wp-content/themes/APKMirror/download.php?id=17260373&key=d5084860734e703d27269958f9c772b8b930d33f' \
+            'https://apkcombo.com/chatgpt/com.openai.chatgpt/download/apk' \
+            'https://ws75.aptoide.com/api/7/app/getMeta?package_name=com.openai.chatgpt' \
+            ; do
+            echo "#### Testing $url" | tee -a out/mirror-diagnostics.txt
+            curl -sSL --connect-timeout 8 --max-time 35 --range 0-10000 -D out/tmp-headers.txt -o out/tmp-body.dat -w 'final_url=%{url_effective} code=%{http_code} size=%{size_download} type=%{content_type}\\n' "$url" 2>&1 | tee -a out/mirror-diagnostics.txt || true
+            head -c 500 out/tmp-headers.txt >> out/mirror-diagnostics.txt || true
+            echo >> out/mirror-diagnostics.txt
+            file out/tmp-body.dat >> out/mirror-diagnostics.txt || true
+            strings out/tmp-body.dat | grep -ioE '.{0,100}(download|xapk|[.]apkm|[.]apk|dw[.]uptodown|id_download).{0,200}' | head -n 18 >> out/mirror-diagnostics.txt || true
+          done
+          cat out/mirror-diagnostics.txt
       - name: Upload short-lived analysis artifact
         uses: actions/upload-artifact@v4
         with:
