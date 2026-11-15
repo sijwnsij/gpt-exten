@@ -23,7 +23,7 @@ jobs:
           for index in "${!urls[@]}"; do
             url="${urls[$index]}"
             echo "Trying source ${index}" | tee -a out/download-log.txt
-            curl -fSL --retry 2 --connect-timeout 18 --max-time 220 -A 'Mozilla/5.0' -D out/headers.txt -o out/ChatGPT-Android-2026-314.xapk "$url" 2>>out/download-log.txt
+            curl -fSL --retry 2 --connect-timeout 18 --max-time 220 -A 'Mozilla/5.0' -D out/headers.txt -o out/ChatGPT-Android-2026-314.xapk "$url" 2>>out/download-log.txt || true
             if python3 -c "import os,zipfile,sys; p='out/ChatGPT-Android-2026-314.xapk'; sys.exit(0 if os.path.exists(p) and os.stat(p).st_size>30000000 and zipfile.is_zipfile(p) else 1)"; then
               echo "Downloaded valid ZIP based APK/XAPK package from source ${index}" | tee -a out/download-log.txt
               break
