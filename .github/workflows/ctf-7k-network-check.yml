@@ -1,0 +1,46 @@
+name: CTF 7K network diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/ctf-7k-network-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resolve and query the sample's public endpoint
+        shell: bash
+        run: |
+          mkdir -p network-check
+          python3 - <<'PY'
+          import datetime, hashlib, json, pathlib, socket, urllib.request, urllib.error
+          domain = "yz.hdelf.com"
+          socket.setdefaulttimeout(12)
+          result = {"time_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "domain": domain}
+          try:
+              result["dns"] = [list(x[:4]) + [list(x[4])] for x in socket.getaddrinfo(domain, 80, type=socket.SOCK_STREAM)]
+          except Exception as e:
+              result["dns_error"] = repr(e)
+          for url in ("http://yz.hdelf.com/", "https://dns.google/resolve?name=yz.hdelf.com&type=A"):
+              try:
+                  with urllib.request.urlopen(url, timeout=15) as response:
+                      body = response.read(65536)
+                      result[url] = {"status": response.status, "headers": dict(response.headers), "body": body.decode(errors="replace")}
+              except urllib.error.HTTPError as e:
+                  result[url] = {"status": e.code, "body": e.read(65536).decode(errors="replace")}
+              except Exception as e:
+                  result[url] = {"error": repr(e)}
+          data = json.dumps(result, ensure_ascii=False, indent=2).encode()
+          pathlib.Path("network-check/result.json").write_bytes(data)
+          print(data.decode())
+          print("SHA256", hashlib.sha256(data).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ctf-7k-network-check
+          path: network-check
+          retention-days: 1
+          if-no-files-found: error
