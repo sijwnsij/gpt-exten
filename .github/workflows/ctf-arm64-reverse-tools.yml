@@ -1,0 +1,43 @@
+name: Fetch CTF AArch64 reverse tools
+on:
+  push:
+    paths:
+      - '.github/workflows/ctf-arm64-reverse-tools.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch vetted CPython Linux x64 binary wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reverse/wheels
+          python -m pip download --only-binary=:all: --dest reverse/wheels unicorn==2.1.4 capstone==5.0.6 pyelftools==0.32
+          python - <<'PY'
+          import hashlib, json, pathlib, zipfile
+          rows=[]
+          for p in sorted(pathlib.Path('reverse/wheels').glob('*.whl')):
+              with zipfile.ZipFile(p) as z:
+                  name=next(n for n in z.namelist() if n.endswith('.dist-info/METADATA'))
+                  lines=z.read(name).decode().splitlines()
+                  meta={k:v.strip() for line in lines if ': ' in line for k,v in [line.split(': ',1)] if k in ('Name','Version')}
+              rows.append(dict(name=meta['Name'],version=meta['Version'],file=str(p),size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+          pathlib.Path('reverse/manifest.json').write_text(json.dumps(rows,indent=2))
+          PY
+          sha256sum reverse/wheels/* > reverse/SHA256SUMS.txt
+          tar -czf arm64-reverse-unicorn-2.1.4-capstone-5.0.6-pyelftools-0.32-linux-x64-py313.tar.gz reverse
+          test $(stat -c %s arm64-reverse-*.tar.gz) -lt 104857600
+          sha256sum arm64-reverse-*.tar.gz
+          cat reverse/manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-reverse-uc214-cs506-py313-linux-x64
+          path: arm64-reverse-*.tar.gz
+          retention-days: 400
+          if-no-files-found: error
