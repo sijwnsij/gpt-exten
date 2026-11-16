@@ -1,0 +1,49 @@
+name: CTF 7K endpoint reachability
+on:
+  push:
+    paths:
+      - '.github/workflows/ctf-7k-endpoint-reachability.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - name: Check normal HTTP and HTTPS access
+        shell: bash
+        run: |
+          mkdir -p endpoint-check
+          python3 - <<'PY'
+          import datetime,json,pathlib,socket,time,urllib.request,urllib.error,platform
+          result={"time_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),"platform":platform.platform(),"endpoint":"yz.hdelf.com"}
+          for port in (80,443):
+              start=time.monotonic()
+              try:
+                  with socket.create_connection(("yz.hdelf.com",port),timeout=8) as connection:
+                      result["tcp_"+str(port)]={"peer":connection.getpeername(),"elapsed":time.monotonic()-start}
+              except Exception as e:
+                  result["tcp_"+str(port)]={"error":repr(e),"elapsed":time.monotonic()-start}
+          for url in ("http://yz.hdelf.com/","https://yz.hdelf.com/"):
+              try:
+                  request=urllib.request.Request(url,headers={"User-Agent":"CTF-environment-diagnostic"})
+                  with urllib.request.urlopen(request,timeout=8) as response:
+                      result[url]={"status":response.status,"headers":dict(response.headers),"body":response.read(4096).decode(errors="replace")}
+              except urllib.error.HTTPError as e:
+                  result[url]={"status":e.code,"body":e.read(4096).decode(errors="replace")}
+              except Exception as e:
+                  result[url]={"error":repr(e)}
+          data=json.dumps(result,ensure_ascii=False,indent=2)
+          pathlib.Path("endpoint-check/result.json").write_text(data)
+          print(data)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ctf-7k-endpoint-${{ matrix.os }}
+          path: endpoint-check
+          retention-days: 1
