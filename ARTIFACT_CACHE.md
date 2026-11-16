@@ -31,3 +31,28 @@ Reuse only when Name + Version + Platform + Architecture match and the Artifact 
 | pathspec | 1.1.1 | Python 3 / any | any | formatter/wheels/pathspec-1.1.1-py3-none-any.whl | a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189 |
 | platformdirs | 4.14.5 | Python 3 / any | any | formatter/wheels/platformdirs-4.14.5-py3-none-any.whl | 8e778c6fa421516f4d3369449f8df3b0e1b72c0e0005fe88e3ec772d0a14e750 |
 | pytokens | 0.4.1 | Linux / CPython 3.13 / manylinux2014+ | x86_64 | formatter/wheels/pytokens-0.4.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl | 29d1d8fb1030af4d231789959f21821ab6325e463f0503a61d204343c9b355d1 |
+
+## Artifact Record: ARM64 CTF reverse tools Linux x64 CPython 3.13
+
+- Artifact Name: arm64-reverse-uc214-cs506-py313-linux-x64
+- Artifact ID: 14229073554
+- Run ID: 43875270521
+- Workflow: .github/workflows/ctf-arm64-reverse-tools.yml
+- File: arm64-reverse-unicorn-2.1.4-capstone-5.0.6-pyelftools-0.32-linux-x64-py313.tar.gz (inside the Artifact ZIP)
+- Size: 17637988 bytes (Artifact ZIP)
+- SHA256: 1a4751209224af8ef136ce8a48dddc854b9e60b74b86e1e3da96c2416104ed75 (Artifact ZIP; verified locally)
+- Created At: 2026-11-16T13:23:29Z
+- Expires At: 2027-02-14T13:23:20Z
+- Storage Mode: SINGLE
+- Original File: arm64-reverse-unicorn-2.1.4-capstone-5.0.6-pyelftools-0.32-linux-x64-py313.tar.gz
+- Original Size: 17632327 bytes
+- Original SHA256: b1d538f8624d9889dbe4ec62eaabbc2f71f62abb6523b6ff276f0419ab572c1e
+- Part Count: 1
+- Part 1: Artifact ID 14229073554; Artifact Name arm64-reverse-uc214-cs506-py313-linux-x64; Size 17637988; SHA256 1a4751209224af8ef136ce8a48dddc854b9e60b74b86e1e3da96c2416104ed75
+- Validation: expired=false at retrieval; ZIP, tarball, wheel SHA256, offline install and imports verified.
+
+| Name | Version | Platform | Architecture | File/Path | SHA256 |
+|---|---|---|---|---|---|
+| unicorn | 2.1.4 | Linux / CPython 3.13 / manylinux2014+ | x86_64 | reverse/wheels/unicorn-2.1.4-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl | 9d6e6dea140560de4ebd8446661f7ef84a357d428c14a3ef09dacd306ec8c239 |
+| capstone | 5.0.6 | Linux / Python 3 / manylinux2014+ | x86_64 | reverse/wheels/capstone-5.0.6-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl | 0358855773100bb91ae6681fabce7299df83156945ba943f6211061a592c54a6 |
+| pyelftools | 0.32 | Python 3 / any | any | reverse/wheels/pyelftools-0.32-py3-none-any.whl | 013df952a006db5e138b1edf6d8a68ecc50630adbd0d83a2d41e7f846163d738 |
