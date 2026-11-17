@@ -178,3 +178,28 @@ Part Count: 1
 | libvirglrenderer1 | 1.1.0-2 | Debian 13 Linux | amd64 | packages/libvirglrenderer1_1.1.0-2_amd64.deb | e27da1f8b54538b2c7b4dfe112811d09bc79c8d2faf39b3e8300f1b26f5dbd48 |
 
 Retain actual expires_at above. Prefix modules must match QEMU binary version; QEMU_MODULE_DIR points to prefix/usr/lib/x86_64-linux-gnu/qemu. Module enumeration and an 8-second native OpenGL backend probe succeeded.
+
+
+## Artifact Record: HanaBi Android clang-format and GLSL validation tools Linux x86_64
+- Artifact Name: hanabi-android-validation-tools-linux-x64
+- Artifact ID: 14332249069
+- Run ID: 44095593982
+- Workflow: .github/workflows/hanabi-android-validation-tools.yml
+- File: hanabi-android-tools-linux-x64.tar.gz (inside artifact ZIP)
+- Size: 9052506 bytes (Artifact ZIP)
+- SHA256: a003e0e0566cabc3f93ffda3bdcc46e83cdb665a4c5b563fd9c331d15e4fde81 (Artifact ZIP)
+- Created At: 2026-11-17T13:43:42Z
+- Expires At: 2027-02-15T13:43:32Z
+- Storage Mode: SINGLE
+- Original File: hanabi-android-tools-linux-x64.tar.gz
+- Original Size: 9052082 bytes
+- Original SHA256: 66fa8945f1353fe77862ffd3e4f1bb1bc65e368f631d57bafe1d441c4c669724
+- Part Count: 1
+- Part 1: Artifact ID 14332249069; Artifact Name hanabi-android-validation-tools-linux-x64; Size 9052506; SHA256 a003e0e0566cabc3f93ffda3bdcc46e83cdb665a4c5b563fd9c331d15e4fde81
+- Validation: expired=false at retrieval; artifact ZIP, tarball, and all 28 inner manifest files verified locally; both tools executed successfully on Debian 13 x86_64.
+- Retention: requested 400 days; actual GitHub expiry above is authoritative (90 days).
+
+| Name | Version | Platform | Architecture | File/Path | SHA256 |
+|---|---|---|---|---|---|
+| clang-format | 19.1.7 | Linux | x86_64 | bundle/formatter/clang_format/data/bin/clang-format | 70966c7d32d605aaccd043dd59bd3ee2173531043918a9714b78ebf8eb8e4028 |
+| glslangValidator | 15.1.0 / 15.1.0-2~ubuntu0.24.04.2 | Linux (Ubuntu 24.04 package; verified Debian 13) | x86_64 | bundle/prefix/usr/bin/glslangValidator | 96ea85d4228d7065507cd58454628e0d3c9ec8bbd29a0cd20ee0f3cefaf6d026 |
