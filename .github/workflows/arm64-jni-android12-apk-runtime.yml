@@ -1,0 +1,41 @@
+name: Verify shipped ARM64-only APK on Android 12 x86_64 ARM translation
+on:
+  push:
+    paths:
+      - '.github/workflows/arm64-jni-android12-apk-runtime.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 44078293003
+          name: arm64-jni-overlay-apk-android12
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm || true
+      - name: Verify original ARM64-only APK in Android 12 ARM translation emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: APK_TO_TEST=dist/Arm64OverlayDemo-arm64-v8a.apk EXPECTED_ABI=arm64-v8a bash arm64-jni-floating-loop/ci/run-emulator-test.sh
+      - name: Upload real APK runtime results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-arm64-apk-android12-results
+          path: ci-results/
+          retention-days: 1
+          if-no-files-found: ignore
