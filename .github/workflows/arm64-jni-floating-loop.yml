@@ -1,0 +1,75 @@
+name: ARM64 JNI overlay APK build and Android 12 run
+on:
+  push:
+    paths:
+      - 'arm64-jni-floating-loop/**'
+      - '.github/workflows/arm64-jni-floating-loop.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure Android SDK and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          java -version
+      - name: Build signed release-style ARM64-only test APK
+        shell: bash
+        working-directory: arm64-jni-floating-loop
+        run: |
+          set -euo pipefail
+          ./build.sh
+          mkdir -p ../dist
+          cp build/Arm64OverlayDemo-arm64-v8a.apk ../dist/
+          sha256sum ../dist/*.apk
+          unzip -Z1 ../dist/*.apk | grep '^lib/' | tee ../dist/native-libraries.txt
+          test "$(unzip -Z1 ../dist/*.apk | grep '^lib/' | wc -l)" -eq 1
+          unzip -Z1 ../dist/*.apk | grep -qx 'lib/arm64-v8a/libarm64loop.so'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../dist/*.apk | head -n 12
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-jni-overlay-apk-android12
+          path: |
+            dist/Arm64OverlayDemo-arm64-v8a.apk
+            dist/native-libraries.txt
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+  test-android12-arm64:
+    needs: build
+    runs-on: macos-15-arm64
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-jni-overlay-apk-android12
+          path: dist
+      - name: Boot actual ARM64 Android 12 and test installed APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          target: google_apis
+          arch: arm64-v8a
+          profile: pixel_5
+          cores: 2
+          ram-size: 2048M
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash arm64-jni-floating-loop/ci/run-emulator-test.sh
+      - name: Upload device logs and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-jni-overlay-android12-test-results
+          path: ci-results/
+          retention-days: 1
+          if-no-files-found: ignore

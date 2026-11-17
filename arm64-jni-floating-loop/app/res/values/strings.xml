@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ARM64 JNI 悬浮窗测试</string>
+</resources>
