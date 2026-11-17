@@ -1,0 +1,38 @@
+name: HanaBi Android validation tools
+on:
+  push:
+    paths:
+      - .github/workflows/hanabi-android-validation-tools.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download pinned formatter and shader validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/wheels bundle/packages bundle/prefix
+          python3 -m pip download --no-deps --only-binary=:all: --dest bundle/wheels clang-format==19.1.7
+          cd bundle/packages
+          apt-get download glslang-tools
+          cd ../..
+          for deb in bundle/packages/*.deb; do dpkg-deb -x "$deb" bundle/prefix; done
+          python3 -m pip install --no-index --find-links bundle/wheels --target bundle/formatter clang-format==19.1.7
+          bundle/formatter/clang_format/data/bin/clang-format --version > bundle/VERSIONS.txt
+          bundle/prefix/usr/bin/glslangValidator --version >> bundle/VERSIONS.txt
+          dpkg-deb -f bundle/packages/*.deb Package Version Architecture >> bundle/VERSIONS.txt
+          find bundle -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > bundle/SHA256SUMS
+          tar -czf hanabi-android-tools-linux-x64.tar.gz bundle
+          sha256sum hanabi-android-tools-linux-x64.tar.gz > TOOLCHAIN_SHA256.txt
+          test "$(stat -c %s hanabi-android-tools-linux-x64.tar.gz)" -lt 100000000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hanabi-android-validation-tools-linux-x64
+          path: |
+            hanabi-android-tools-linux-x64.tar.gz
+            TOOLCHAIN_SHA256.txt
+          retention-days: 400
+          compression-level: 0
