@@ -1,0 +1,275 @@
+name: SystemPulse full ARM64 Android environment
+on:
+  push:
+    paths:
+      - '.github/workflows/systempulse-full-arm64-env.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Fetch and export official ARM64 Android 12 image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p metadata parts host-tools rootfs
+          docker pull --platform linux/arm64 redroid/redroid:12.0.0_64only-latest
+          docker image inspect redroid/redroid:12.0.0_64only-latest > metadata/redroid-image-inspect.json
+          CID=$(docker create --platform linux/arm64 redroid/redroid:12.0.0_64only-latest)
+          docker export "$CID" -o redroid-rootfs.tar
+          docker rm "$CID"
+          sudo tar --xattrs --numeric-owner -xpf redroid-rootfs.tar -C rootfs
+          sudo find rootfs -maxdepth 3 -type f -name '*init*' > metadata/init-file-list.txt
+          sudo tar -czf metadata/android-init-configs.tar.gz -C rootfs --ignore-failed-read system/etc/init vendor/etc/init odm/etc/init product/etc/init system/etc/cgroups.json system/etc/task_profiles.json system/build.prop vendor/build.prop
+          sudo du -sh rootfs > metadata/rootfs-size.txt
+          sudo find rootfs/system/framework rootfs/apex -maxdepth 2 -type f > metadata/framework-file-list.txt
+          rm redroid-rootfs.tar
+          truncate -s 6G redroid12-arm64.ext4
+          sudo mkfs.ext4 -q -F -b 4096 -I 256 -L redroid12 -E lazy_itable_init=0,lazy_journal_init=0 -d rootfs redroid12-arm64.ext4
+          sudo e2fsck -fn redroid12-arm64.ext4
+          sudo chmod 644 redroid12-arm64.ext4
+          sha256sum redroid12-arm64.ext4 > metadata/root-image.sha256
+          stat -c %s redroid12-arm64.ext4 > metadata/root-image.size
+          zstd -T0 -8 redroid12-arm64.ext4 -o redroid12-arm64.ext4.zst
+          sha256sum redroid12-arm64.ext4.zst > metadata/compressed-image.sha256
+          stat -c %s redroid12-arm64.ext4.zst > metadata/compressed-image.size
+          split -b 100000000 -d -a 3 redroid12-arm64.ext4.zst parts/redroid12-arm64.ext4.zst.part-
+      - name: Fetch official adb and scrcpy host tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://dl.google.com/android/repository/platform-tools-latest-linux.zip -o platform-tools.zip
+          unzip -q platform-tools.zip -d host-tools
+          cp host-tools/platform-tools/source.properties metadata/platform-tools-source.properties
+          curl -fL --retry 3 https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-linux-x86_64-v5.0.1.tar.gz -o scrcpy-linux-x86_64-v5.0.1.tar.gz
+          curl -fL --retry 3 https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/SHA256SUMS.txt -o metadata/scrcpy-SHA256SUMS.txt
+          sha256sum --check --ignore-missing metadata/scrcpy-SHA256SUMS.txt
+          tar -xzf scrcpy-linux-x86_64-v5.0.1.tar.gz -C host-tools
+          tar -czf host-tools-android-ui-linux-x86_64.tar.gz -C host-tools .
+          sha256sum host-tools-android-ui-linux-x86_64.tar.gz > metadata/host-tools.sha256
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('.')
+          def item(p):
+              p=pathlib.Path(p)
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for b in iter(lambda:f.read(8388608),b''):h.update(b)
+              return dict(file=str(p),size=p.stat().st_size,sha256=h.hexdigest())
+          inspect=json.loads((root/'metadata/redroid-image-inspect.json').read_text())[0]
+          manifest=dict(image='redroid/redroid:12.0.0_64only-latest',architecture=inspect['Architecture'],repo_digests=inspect.get('RepoDigests'),config=inspect['Config'],original=item('redroid12-arm64.ext4'),compressed=item('redroid12-arm64.ext4.zst'),parts=[item(p) for p in sorted((root/'parts').glob('*'))],host_tools=item('host-tools-android-ui-linux-x86_64.tar.gz'),platform_tools=(root/'metadata/platform-tools-source.properties').read_text(),scrcpy_version='5.0.1')
+          assert manifest['architecture']=='arm64'
+          assert all(p['size']<=100000000 for p in manifest['parts'])
+          (root/'metadata/manifest.json').write_text(json.dumps(manifest,indent=2))
+          print(json.dumps(manifest,indent=2))
+          PY
+      - name: Upload environment manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-full-arm64-env-manifest
+          path: metadata
+          retention-days: 400
+          compression-level: 0
+      - name: Upload Android UI host tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-android-ui-host-tools-linux-x86_64
+          path: host-tools-android-ui-linux-x86_64.tar.gz
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 000
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-000') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-000
+          path: parts/redroid12-arm64.ext4.zst.part-000
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 001
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-001') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-001
+          path: parts/redroid12-arm64.ext4.zst.part-001
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 002
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-002') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-002
+          path: parts/redroid12-arm64.ext4.zst.part-002
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 003
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-003') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-003
+          path: parts/redroid12-arm64.ext4.zst.part-003
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 004
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-004') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-004
+          path: parts/redroid12-arm64.ext4.zst.part-004
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 005
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-005') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-005
+          path: parts/redroid12-arm64.ext4.zst.part-005
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 006
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-006') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-006
+          path: parts/redroid12-arm64.ext4.zst.part-006
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 007
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-007') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-007
+          path: parts/redroid12-arm64.ext4.zst.part-007
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 008
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-008') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-008
+          path: parts/redroid12-arm64.ext4.zst.part-008
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 009
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-009') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-009
+          path: parts/redroid12-arm64.ext4.zst.part-009
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 010
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-010') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-010
+          path: parts/redroid12-arm64.ext4.zst.part-010
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 011
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-011') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-011
+          path: parts/redroid12-arm64.ext4.zst.part-011
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 012
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-012') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-012
+          path: parts/redroid12-arm64.ext4.zst.part-012
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 013
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-013') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-013
+          path: parts/redroid12-arm64.ext4.zst.part-013
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 014
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-014') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-014
+          path: parts/redroid12-arm64.ext4.zst.part-014
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 015
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-015') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-015
+          path: parts/redroid12-arm64.ext4.zst.part-015
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 016
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-016') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-016
+          path: parts/redroid12-arm64.ext4.zst.part-016
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 017
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-017') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-017
+          path: parts/redroid12-arm64.ext4.zst.part-017
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 018
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-018') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-018
+          path: parts/redroid12-arm64.ext4.zst.part-018
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 019
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-019') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-019
+          path: parts/redroid12-arm64.ext4.zst.part-019
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 020
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-020') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-020
+          path: parts/redroid12-arm64.ext4.zst.part-020
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 021
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-021') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-021
+          path: parts/redroid12-arm64.ext4.zst.part-021
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 022
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-022') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-022
+          path: parts/redroid12-arm64.ext4.zst.part-022
+          retention-days: 400
+          compression-level: 0
+      - name: Upload ARM64 Android image part 023
+        if: hashFiles('parts/redroid12-arm64.ext4.zst.part-023') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-redroid12-arm64-image-part-023
+          path: parts/redroid12-arm64.ext4.zst.part-023
+          retention-days: 400
+          compression-level: 0
