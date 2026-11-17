@@ -1,0 +1,57 @@
+name: ARM64 Android host graphics modules
+on:
+  push:
+    paths:
+      - '.github/workflows/systempulse-host-graphics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Fetch matching Debian QEMU graphics modules and virgl renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p packages prefix out
+          python3 - <<'PY'
+          import urllib.request,lzma,pathlib,hashlib,json
+          repos=[('https://deb.debian.org/debian','dists/trixie/main/binary-amd64/Packages.xz'),('https://security.debian.org/debian-security','dists/trixie-security/main/binary-amd64/Packages.xz')]
+          wanted={'qemu-system-gui','qemu-system-modules-opengl','libvirglrenderer1'}
+          selected={}
+          for base,index in repos:
+              data=lzma.decompress(urllib.request.urlopen(base+'/'+index).read()).decode()
+              for block in data.split('\n\n'):
+                  lines=block.splitlines()
+                  if not lines or not lines[0].startswith('Package: '): continue
+                  name=lines[0][9:]
+                  if name not in wanted:continue
+                  fields={}
+                  for line in lines:
+                      if ': ' in line and not line.startswith(' '):
+                          key,value=line.split(': ',1);fields[key]=value
+                  if name.startswith('qemu-') and fields['Version']!='1:10.0.13+ds-0+deb13u1':continue
+                  selected[name]=(base,fields)
+          assert wanted<=selected.keys(),selected.keys()
+          manifest=[]
+          for name,(base,f) in selected.items():
+              p=pathlib.Path('packages')/pathlib.Path(f['Filename']).name
+              urllib.request.urlretrieve(base+'/'+f['Filename'],p)
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==f['SHA256']
+              manifest.append(dict(name=name,version=f['Version'],architecture=f['Architecture'],file=str(p),size=p.stat().st_size,sha256=f['SHA256'],depends=f.get('Depends')))
+          pathlib.Path('out/package-manifest.json').write_text(json.dumps(manifest,indent=2))
+          PY
+          for FILE in packages/*.deb; do dpkg-deb -x "$FILE" prefix; done
+          tar -I 'zstd -T0 -8' -cf out/qemu10.0.13-host-graphics-linux-x86_64.tar.zst -C prefix .
+          cd out
+          sha256sum * > SHA256SUMS
+          test "$(stat -c %s qemu10.0.13-host-graphics-linux-x86_64.tar.zst)" -lt 100000000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qemu10.0.13-host-graphics-linux-x86_64
+          path: out/
+          retention-days: 400
+          compression-level: 0
