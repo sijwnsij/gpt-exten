@@ -1,0 +1,114 @@
+name: SystemPulse ARM64 NDK r27c build dependencies
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/systempulse-deps-r27c.yml'
+jobs:
+  build-deps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare Android NDK r27c + R8 + Noto font
+        shell: bash
+        run: |
+          set -euo pipefail
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          if [ ! -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" ]; then
+            echo 'NDK r27c missing; installing with sdkmanager'
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'ndk;27.2.12479018' || test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+          fi
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+          head -25 "$NDK/source.properties"
+          SRC="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          DST="$GITHUB_WORKSPACE/payload/android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64"
+          mkdir -p "$DST/bin" "$DST/sysroot/usr/lib" "$DST/lib"
+          cp -L "$SRC/bin/clang" "$DST/bin/clang"
+          ln -s clang "$DST/bin/clang++"
+          cp -L "$SRC/bin/ld.lld" "$DST/bin/ld.lld"
+          cp -L "$SRC/bin/llvm-strip" "$DST/bin/llvm-strip"
+          cp -a "$SRC/sysroot/usr/include" "$DST/sysroot/usr/"
+          cp -a "$SRC/sysroot/usr/lib/aarch64-linux-android" "$DST/sysroot/usr/lib/"
+          cp -a "$SRC/lib/clang" "$DST/lib/"
+          mkdir -p "$GITHUB_WORKSPACE/payload/external"
+          cd "$GITHUB_WORKSPACE/payload/external"
+          curl -fSL --retry 3 --connect-timeout 20 --max-time 240 -o r8-8.3.37.jar 'https://dl.google.com/dl/android/maven2/com/android/tools/r8/8.3.37/r8-8.3.37.jar'
+          echo '59753e70a74f918389cc87f1b7d66b5c0862932559167425708ded159e3de439  r8-8.3.37.jar' | sha256sum -c -
+          curl -fSL --retry 3 --connect-timeout 20 --max-time 240 -o NotoSansCJKsc-Bold.otf 'https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Bold.otf'
+          echo 'b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a  NotoSansCJKsc-Bold.otf' | sha256sum -c -
+          cd "$GITHUB_WORKSPACE"
+          printf '#include <string>\nint main(){std::string s="ok";return s.size()!=2;}\n' >smoke.cpp
+          "$DST/bin/clang++" --target=aarch64-linux-android31 --sysroot="$DST/sysroot" -static-libstdc++ smoke.cpp -o smoke
+          readelf -h smoke | grep -E 'Class:|Machine:|Type:'
+          du -sh payload payload/android-ndk-r27c payload/external
+          tar -czf systempulse-dependencies-r27c-linux-x64.tar.gz -C payload .
+          sha256sum systempulse-dependencies-r27c-linux-x64.tar.gz | tee SHA256.txt
+          ls -lh systempulse-dependencies-r27c-linux-x64.tar.gz
+          mkdir -p dist
+          split -b 90000000 -d -a 3 systempulse-dependencies-r27c-linux-x64.tar.gz dist/systempulse-deps-r27c-part-
+          sha256sum dist/* | tee PARTS_SHA256.txt
+          ls -lh dist/
+      - name: Upload part 000
+        if: hashFiles('dist/systempulse-deps-r27c-part-000') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-part-000
+          path: dist/systempulse-deps-r27c-part-000
+          retention-days: 400
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload part 001
+        if: hashFiles('dist/systempulse-deps-r27c-part-001') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-part-001
+          path: dist/systempulse-deps-r27c-part-001
+          retention-days: 400
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload part 002
+        if: hashFiles('dist/systempulse-deps-r27c-part-002') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-part-002
+          path: dist/systempulse-deps-r27c-part-002
+          retention-days: 400
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload part 003
+        if: hashFiles('dist/systempulse-deps-r27c-part-003') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-part-003
+          path: dist/systempulse-deps-r27c-part-003
+          retention-days: 400
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload part 004
+        if: hashFiles('dist/systempulse-deps-r27c-part-004') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-part-004
+          path: dist/systempulse-deps-r27c-part-004
+          retention-days: 400
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload part 005
+        if: hashFiles('dist/systempulse-deps-r27c-part-005') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-part-005
+          path: dist/systempulse-deps-r27c-part-005
+          retention-days: 400
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: systempulse-deps-r27c-manifest
+          path: |
+            SHA256.txt
+            PARTS_SHA256.txt
+          retention-days: 400
