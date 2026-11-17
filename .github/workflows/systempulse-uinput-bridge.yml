@@ -1,0 +1,78 @@
+name: SystemPulse physical touchscreen test bridge
+on:
+  push:
+    paths:
+      - '.github/workflows/systempulse-uinput-bridge.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build native ARM64 input helper and scrcpy server bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          git clone --depth 1 --branch v5.0.1 https://github.com/Genymobile/scrcpy.git scrcpy-source
+          git -C scrcpy-source rev-parse HEAD > out/scrcpy-upstream-commit.txt
+          NDK_DIR="$ANDROID_HOME/ndk/27.2.12479018"
+          if [ ! -d "$NDK_DIR" ]; then NDK_DIR=$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1); fi
+          cp "$NDK_DIR/source.properties" out/ndk-source.properties
+          "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang" -O2 -Wall -Wextra android-ui-test/uinput_touch.c -o out/uinput_touch
+          cp android-ui-test/uinput_touch.c out/
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scrcpy-source/server/src/main/java/com/genymobile/scrcpy/control/Controller.java')
+          s=p.read_text()
+          marker='    private boolean injectTouch(int action, long pointerId, Position position, float pressure, int actionButton, int buttons) {'
+          method='''    private java.io.FileOutputStream labTouchOutput;
+              private boolean labPhysicalInput(String event) {
+                  File fifo = new File("/data/local/tmp/systempulse-touch.fifo");
+                  if (!fifo.exists()) return false;
+                  try {
+                      if (labTouchOutput == null) labTouchOutput = new java.io.FileOutputStream(fifo, true);
+                      labTouchOutput.write(event.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                      labTouchOutput.flush();
+                      return true;
+                  } catch (IOException e) {
+                      Ln.w("Physical touchscreen bridge: " + e);
+                      return false;
+                  }
+              }
+          '''
+          assert marker in s
+          s=s.replace(marker,method+'\n'+marker,1)
+          start=s.index(marker)
+          anchor='        int targetDisplayId = pair.second;'
+          at=s.index(anchor,start)+len(anchor)
+          s=s[:at]+'''
+                  if (labPhysicalInput("T " + action + " " + point.getX() + " " + point.getY() + "\\n")) return true;
+          '''+s[at:]
+          key='    private boolean injectKeycode(int action, int keycode, int repeat, int metaState) {'
+          s=s.replace(key,key+'''
+                  if ((keycode == KeyEvent.KEYCODE_VOLUME_UP || keycode == KeyEvent.KEYCODE_VOLUME_DOWN)
+                          && labPhysicalInput("K " + action + " " + keycode + "\\n")) return true;
+          ''',1)
+          p.write_text(s)
+          PY
+          git -C scrcpy-source diff > out/scrcpy-physical-touch.patch
+          if [ ! -f "$ANDROID_HOME/platforms/android-36/android.jar" ] || [ ! -x "$ANDROID_HOME/build-tools/36.0.0/d8" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" >/dev/null
+          fi
+          ANDROID_PLATFORM=36 ANDROID_BUILD_TOOLS=36.0.0 BUILD_DIR="$PWD/out/server-build" bash scrcpy-source/server/build_without_gradle.sh
+          cp out/server-build/scrcpy-server out/scrcpy-server-physical-touch
+          rm -rf out/server-build
+          cp scrcpy-source/LICENSE out/LICENSE.scrcpy
+          cd out
+          sha256sum * > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: systempulse-uinput-bridge-arm64-scrcpy501
+          path: out/
+          retention-days: 1
+          compression-level: 0
