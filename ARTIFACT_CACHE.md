@@ -126,3 +126,29 @@ Image Digest: redroid/redroid@sha256:a6c464bbedcf1dcb67dbf91f329fbb19bee5b50631f
 | scrcpy | 5.0.1 | Linux | x86_64 | host-tools-android-ui-linux-x86_64.tar.gz/scrcpy-linux-x86_64-v5.0.1 | 66bf18b75bae19d104de6b1a3cfa6bf797bdd5be69fa0cde0c02a591abc08f2a (bundle; upstream SHA256SUMS verified) |
 
 Retention requested: 400 days. Actual GitHub expires_at above is authoritative (90 days). Parts are at most 100,000,000 bytes. Restore in part order, verify each part, compressed image, and expanded image.
+
+
+## Artifact Record: Linux 6.12.111 ARM64 DMA-BUF system heap for Android
+
+Artifact Name: systempulse-dmabuf-system-heap-linux6.12.111-arm64
+Artifact ID: 14317073216
+Run ID: 44059301581
+Workflow: .github/workflows/systempulse-dma-heap.yml
+File: systempulse-dmabuf-system-heap-linux6.12.111-arm64.zip
+Size: 755866
+SHA256: 1df9431b5b9d0ef7af5bad9e37c32eb85923da952505414edd50a87e97a3e225
+Created At: 2026-11-17T09:51:20Z
+Expires At: 2027-02-15T09:50:45Z
+Storage Mode: SINGLE
+Original File: lab_dmabuf_heap.ko
+Original Size: see Artifact ZIP entry metadata
+Original SHA256: d827fa2f113d1a276ddb7c31aca93cebfdcbb23e2a93f9e6f145c37b0209bec3
+Part Count: 1
+
+| Name | Version | Platform | Architecture | File/Path | SHA256 |
+|---|---|---|---|---|---|
+| DMA-BUF system heap module | Linux 6.12.111+deb13-arm64; GCC14; SMP modversions | Linux guest | arm64 | lab_dmabuf_heap.ko | d827fa2f113d1a276ddb7c31aca93cebfdcbb23e2a93f9e6f145c37b0209bec3 |
+| DMA heap core source | upstream v6.12.111; module initialization adapter | Linux | any | dma-heap.c | 9437a8f467b2ee119b6d7d9018a4a35b6b1e895bf0ac6595d178d6d11033fd6b |
+| DMA system heap source | upstream v6.12.111; initialization adapter | Linux | any | system_heap.c | 25886f89df3b2659f0c0c6d7c3850e402b7cf813a0b6c39607334f49e2dc94a9 |
+
+Optional BTF debug metadata omitted. Exact matching kernel headers and upstream source hashes are included. Retention requested 400 days, actual expires_at above is authoritative.
