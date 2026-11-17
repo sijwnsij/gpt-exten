@@ -141,7 +141,7 @@ Created At: 2026-11-17T09:51:20Z
 Expires At: 2027-02-15T09:50:45Z
 Storage Mode: SINGLE
 Original File: lab_dmabuf_heap.ko
-Original Size: see Artifact ZIP entry metadata
+Original Size: 731088
 Original SHA256: d827fa2f113d1a276ddb7c31aca93cebfdcbb23e2a93f9e6f145c37b0209bec3
 Part Count: 1
 
@@ -152,3 +152,29 @@ Part Count: 1
 | DMA system heap source | upstream v6.12.111; initialization adapter | Linux | any | system_heap.c | 25886f89df3b2659f0c0c6d7c3850e402b7cf813a0b6c39607334f49e2dc94a9 |
 
 Optional BTF debug metadata omitted. Exact matching kernel headers and upstream source hashes are included. Retention requested 400 days, actual expires_at above is authoritative.
+
+
+## Artifact Record: QEMU 10.0.13 host graphics modules, Linux x86_64
+
+Artifact Name: qemu10.0.13-host-graphics-linux-x86_64
+Artifact ID: 14319482800
+Run ID: 44064501999
+Workflow: .github/workflows/systempulse-host-graphics.yml
+File: qemu10.0.13-host-graphics-linux-x86_64.zip
+Size: 1065776
+SHA256: f7b808894f9a413078fd5b0d9f230109d42a732ab52b048e1e7418006a48555c
+Created At: 2026-11-17T10:24:20Z
+Expires At: 2027-02-15T10:24:12Z
+Storage Mode: SINGLE
+Original File: qemu10.0.13-host-graphics-linux-x86_64.tar.zst
+Original Size: 1063346
+Original SHA256: 82b431fa1a78caf9bef45a9619acfeee91efa3a16d611de8b0023cd4634514a8
+Part Count: 1
+
+| Name | Version | Platform | Architecture | File/Path | SHA256 |
+|---|---|---|---|---|---|
+| qemu-system-gui | 1:10.0.13+ds-0+deb13u1 | Debian 13 Linux | amd64 | packages/qemu-system-gui_10.0.13+ds-0+deb13u1_amd64.deb | d88c6fc5e82f07f4f8d00309be7e912d3addbfb4d08245c7787d0c57479ef498 |
+| qemu-system-modules-opengl | 1:10.0.13+ds-0+deb13u1 | Debian 13 Linux | amd64 | packages/qemu-system-modules-opengl_10.0.13+ds-0+deb13u1_amd64.deb | 7c435f641bc365062c335db11d5c001fcf4a6ece8eeb47f493a17f0795a12164 |
+| libvirglrenderer1 | 1.1.0-2 | Debian 13 Linux | amd64 | packages/libvirglrenderer1_1.1.0-2_amd64.deb | e27da1f8b54538b2c7b4dfe112811d09bc79c8d2faf39b3e8300f1b26f5dbd48 |
+
+Retain actual expires_at above. Prefix modules must match QEMU binary version; QEMU_MODULE_DIR points to prefix/usr/lib/x86_64-linux-gnu/qemu. Module enumeration and an 8-second native OpenGL backend probe succeeded.
