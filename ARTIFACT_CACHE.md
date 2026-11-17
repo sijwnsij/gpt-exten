@@ -90,3 +90,39 @@ Reuse only when Name + Version + Platform + Architecture match and the Artifact 
 | Android NDK sysroot | r27c / 27.2.12479018 | Linux target sysroot | aarch64-linux-android | android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64/sysroot/ (part of tarball) | 864c123a814b7c8580e912fbf462e04fdc28418547f645ece21c68a9fceb5492 (container tarball) |
 | R8 / D8 | 8.3.37 | Java | any | external/r8-8.3.37.jar | 59753e70a74f918389cc87f1b7d66b5c0862932559167425708ded159e3de439 |
 | Noto Sans CJK SC Bold | Sans2.004 | font/OTF | any | external/NotoSansCJKsc-Bold.otf | b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a |
+
+
+## Artifact Record: Full ARM64 Android 12 + UI tools (SystemPulse)
+
+Run ID: 44054888291
+Workflow: .github/workflows/systempulse-full-arm64-env.yml
+Created At: 2026-11-17T09:22:58Z
+Expires At: 2027-02-15T09:21:52Z
+Storage Mode: SPLIT
+Original File: redroid12-arm64.ext4
+Original Size: 6442450944
+Original SHA256: aa75028ebfd9be97a8c07e08036e6040292d03a8d124484eaa8056a40cfb5fe6
+Compressed File: redroid12-arm64.ext4.zst
+Compressed Size: 514437573
+Compressed SHA256: 34c518e3d96546ca4898068e9805e206f0a7dbd4084456868cc1b6a38fac8cd9
+Part Count: 6
+Image Digest: redroid/redroid@sha256:a6c464bbedcf1dcb67dbf91f329fbb19bee5b50631f0ca6bda6ed7c41b0e64e2
+
+| Artifact Name | Artifact ID | Run ID | File | Size | SHA256 | Created At | Expires At | Part |
+|---|---|---|---|---:|---|---|---|---|
+| systempulse-redroid12-arm64-image-part-000 | 14314269515 | 44054888291 | parts/redroid12-arm64.ext4.zst.part-000 | 100000000 | facca539ff3cec641eed6810de8fbe9113e0cb2ded18ad07e2d1c0b96794596c | 2026-11-17T09:23:04Z | 2027-02-15T09:21:52Z | 1/6 |
+| systempulse-redroid12-arm64-image-part-001 | 14314409090 | 44054888291 | parts/redroid12-arm64.ext4.zst.part-001 | 100000000 | eb0730cad3458b45ddfa3b0324cf57c864cbf4a93ff09378ba38377409accd64 | 2026-11-17T09:23:08Z | 2027-02-15T09:21:52Z | 2/6 |
+| systempulse-redroid12-arm64-image-part-002 | 14314484574 | 44054888291 | parts/redroid12-arm64.ext4.zst.part-002 | 100000000 | ae47a624e9f1d96ca520edeea2102e56ce241e22bdb4ca1720f9a0db2cb694cc | 2026-11-17T09:23:11Z | 2027-02-15T09:21:52Z | 3/6 |
+| systempulse-redroid12-arm64-image-part-003 | 14315891102 | 44054888291 | parts/redroid12-arm64.ext4.zst.part-003 | 100000000 | 920aeea9567a5898f359e9836913128ff06827a432b04223db42b5caad03d98d | 2026-11-17T09:23:15Z | 2027-02-15T09:21:52Z | 4/6 |
+| systempulse-redroid12-arm64-image-part-004 | 14315407119 | 44054888291 | parts/redroid12-arm64.ext4.zst.part-004 | 100000000 | 7d9627a3b053c6807a982b858de5c0b3e960b166bf06d54ef598c5c05fe0dbb7 | 2026-11-17T09:23:18Z | 2027-02-15T09:21:52Z | 5/6 |
+| systempulse-redroid12-arm64-image-part-005 | 14315496591 | 44054888291 | parts/redroid12-arm64.ext4.zst.part-005 | 14437573 | fc89935e8065b645b7602ad0a5bb354e42f1562f01ce555afcf1eac559b24b54 | 2026-11-17T09:23:21Z | 2027-02-15T09:21:52Z | 6/6 |
+| systempulse-full-arm64-env-manifest | 14314179491 | 44054888291 | metadata/* | 47900 | b1cb59de601e1d3ee9233f64e25639652ebd586fa3bd6119523bf2a5121c8e67 | 2026-11-17T09:22:58Z | 2027-02-15T09:21:52Z | manifest ZIP digest |
+| systempulse-android-ui-host-tools-linux-x86_64 | 14314279275 | 44054888291 | host-tools-android-ui-linux-x86_64.tar.gz | 26665220 | 66bf18b75bae19d104de6b1a3cfa6bf797bdd5be69fa0cde0c02a591abc08f2a | 2026-11-17T09:23:01Z | 2027-02-15T09:21:52Z | SINGLE |
+
+| Name | Version | Platform | Architecture | File/Path | SHA256 |
+|---|---|---|---|---|---|
+| redroid | 12.0.0_64only-latest; sha256:a6c464bbedcf1dcb67dbf91f329fbb19bee5b50631f0ca6bda6ed7c41b0e64e2 | Android 12 / Linux guest | arm64 | redroid12-arm64.ext4 | aa75028ebfd9be97a8c07e08036e6040292d03a8d124484eaa8056a40cfb5fe6 |
+| Android platform-tools | 37.0.1 | Linux | x86_64 | host-tools-android-ui-linux-x86_64.tar.gz/platform-tools | 66bf18b75bae19d104de6b1a3cfa6bf797bdd5be69fa0cde0c02a591abc08f2a (bundle) |
+| scrcpy | 5.0.1 | Linux | x86_64 | host-tools-android-ui-linux-x86_64.tar.gz/scrcpy-linux-x86_64-v5.0.1 | 66bf18b75bae19d104de6b1a3cfa6bf797bdd5be69fa0cde0c02a591abc08f2a (bundle; upstream SHA256SUMS verified) |
+
+Retention requested: 400 days. Actual GitHub expires_at above is authoritative (90 days). Parts are at most 100,000,000 bytes. Restore in part order, verify each part, compressed image, and expanded image.
