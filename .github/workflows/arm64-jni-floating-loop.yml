@@ -43,9 +43,44 @@ jobs:
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
+  test-android12-x86_64-control:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDK and build x86_64 comparison APK (not distributed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          cd arm64-jni-floating-loop
+          BUILD_ABI=x86_64 ./build.sh
+          sudo chmod 666 /dev/kvm || true
+      - name: Android 12 x86_64 control test of identical Java/JNI logic
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          cores: 2
+          ram-size: 2048M
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: APK_TO_TEST=arm64-jni-floating-loop/build/Arm64OverlayDemo-x86_64.apk EXPECTED_ABI=x86_64 bash arm64-jni-floating-loop/ci/run-emulator-test.sh
+      - name: Upload x86_64 control logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-jni-overlay-android12-x86_64-control
+          path: ci-results/
+          retention-days: 1
+          if-no-files-found: ignore
   test-android12-arm64:
     needs: build
-    runs-on: macos-15
+    runs-on: macos-15-arm64
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4

@@ -2,6 +2,7 @@
 set -euo pipefail
 mkdir -p ci-results
 PACKAGE="com.example.arm64loop"
+EXPECTED_ABI="${EXPECTED_ABI:-arm64-v8a}"
 APK="${APK_TO_TEST:-dist/Arm64OverlayDemo-arm64-v8a.apk}"
 {
   echo "Android SDK: $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
@@ -48,12 +49,12 @@ adb logcat -d -s Arm64LoopNative:I '*:S' | tee ci-results/native-logcat.txt
 adb shell dumpsys activity services "$PACKAGE" > ci-results/services.txt
 adb shell dumpsys window windows > ci-results/windows.txt
 adb exec-out screencap -p > ci-results/overlay.png || true
-if ! grep -q 'JNI\[arm64-v8a\]' ci-results/native-logcat.txt; then
-  echo 'No ARM64 JNI log output observed' >&2
+if ! grep -Fq "JNI[$EXPECTED_ABI]" ci-results/native-logcat.txt; then
+  echo "No JNI[$EXPECTED_ABI] log output observed" >&2
   exit 1
 fi
-COUNT="$(grep -c 'JNI\[arm64-v8a\]' ci-results/native-logcat.txt || true)"
-echo "ARM64 JNI ticker entries: $COUNT"
+COUNT="$(grep -Fc "JNI[$EXPECTED_ABI]" ci-results/native-logcat.txt || true)"
+echo "JNI ($EXPECTED_ABI) ticker entries: $COUNT"
 if (( COUNT < 3 )); then
   echo 'The native loop did not run for at least three ticks' >&2
   exit 1
@@ -62,4 +63,4 @@ if ! grep -q 'LoopOverlayService' ci-results/services.txt; then
   echo 'Foreground overlay service not found' >&2
   exit 1
 fi
-echo 'PASS: Android 12 installation, start, overlay service, and ARM64 JNI tick loop'
+echo "PASS: Android 12 installation, start, overlay service, and JNI[$EXPECTED_ABI] tick loop"
