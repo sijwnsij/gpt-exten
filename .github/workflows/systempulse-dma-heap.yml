@@ -17,7 +17,7 @@ jobs:
           set -euo pipefail
           mkdir -p out packages mod
           sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-14-aarch64-linux-gnu
+          sudo apt-get install -y -qq gcc-14-aarch64-linux-gnu clang-format-18
           for FILE in linux-headers-6.12.111+deb13-common_6.12.111-1_all.deb linux-headers-6.12.111+deb13-arm64_6.12.111-1_arm64.deb linux-kbuild-6.12.111+deb13_6.12.111-1_amd64.deb; do
             OK=0
             for BASE in https://deb.debian.org/debian/pool/main/l/linux https://security.debian.org/debian-security/pool/updates/main/l/linux; do
@@ -52,9 +52,11 @@ jobs:
           p=Path('mod/system_heap.c');s=p.read_text().replace('static int system_heap_create(void)','int lab_system_heap_create(void)').replace('module_init(system_heap_create);','');p.write_text(s)
           Path('mod/Makefile').write_text('obj-m += lab_dmabuf_heap.o\nlab_dmabuf_heap-y := dma-heap.o system_heap.o\n')
           PY
-          make -C /usr/src/linux-headers-6.12.111+deb13-arm64 M="$PWD/mod" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-14 modules -j2
+          make -C /usr/src/linux-headers-6.12.111+deb13-arm64 M="$PWD/mod" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-14 CONFIG_DEBUG_INFO_BTF_MODULES= modules -j2
           cp mod/lab_dmabuf_heap.ko mod/Makefile mod/dma-heap.c mod/system_heap.c out/
           modinfo out/lab_dmabuf_heap.ko > out/module-info.txt
+          curl -fL --retry 3 https://raw.githubusercontent.com/sijwnsij/gpt-exten/main/android-ui-test/uinput_touch.c -o out/uinput_touch.formatted.c
+          clang-format-18 -i out/uinput_touch.formatted.c
           cd out
           sha256sum * > SHA256SUMS
       - uses: actions/upload-artifact@v4
