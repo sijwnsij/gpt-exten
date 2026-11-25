@@ -1,0 +1,29 @@
+name: Temporary PRoot runtime for ARM64 Android test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/android-chroot-proot-tmp.yml
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download temporary x86_64 PRoot runtime and dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          mkdir -p /tmp/proot-out/debs /tmp/proot-out/root
+          cd /tmp/proot-out/debs
+          apt-get download proot libtalloc2
+          for pkg in *.deb; do dpkg-deb -x "$pkg" /tmp/proot-out/root; done
+          find /tmp/proot-out/root -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proot-out/MANIFEST.sha256
+          cd /tmp/proot-out
+          tar -czf proot-ubuntu2404-amd64.tar.gz root MANIFEST.sha256
+      - name: Upload temporary runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: proot-ubuntu2404-amd64-tmp
+          path: /tmp/proot-out/proot-ubuntu2404-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 1
