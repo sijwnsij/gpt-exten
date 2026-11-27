@@ -1,0 +1,862 @@
+name: WaterCardAnalyzer v0.1.0
+on:
+  push:
+    branches: [watercard-analyzer-v010]
+    paths: ['.github/workflows/watercard-analyzer-v010.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Materialize project (synthetic data only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p project
+          cd project
+          mkdir -p '.'
+          cat > 'settings.gradle' <<'WCA_FILE_1_END'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = 'WaterCardAnalyzer'
+          include ':app'
+          WCA_FILE_1_END
+          mkdir -p '.'
+          cat > 'build.gradle' <<'WCA_FILE_2_END'
+          plugins { id 'com.android.application' version '8.10.1' apply false }
+          WCA_FILE_2_END
+          mkdir -p 'app'
+          cat > 'app/build.gradle' <<'WCA_FILE_3_END'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'local.watercard.analyzer'
+              compileSdk 36
+              defaultConfig {
+                  applicationId 'local.watercard.analyzer'
+                  minSdk 26
+                  targetSdk 36
+                  versionCode 1
+                  versionName '0.1.0'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+          }
+          WCA_FILE_3_END
+          mkdir -p '.'
+          cat > 'gradle.properties' <<'WCA_FILE_4_END'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=false
+          WCA_FILE_4_END
+          mkdir -p '.'
+          cat > '.gitignore' <<'WCA_FILE_5_END'
+          .gradle/
+          build/
+          **/build/
+          local.properties
+          *.keystore
+          .idea/
+          WCA_FILE_5_END
+          mkdir -p 'app/src/main'
+          cat > 'app/src/main/AndroidManifest.xml' <<'WCA_FILE_6_END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="local.watercard.analyzer">
+              <uses-permission android:name="android.permission.NFC" />
+              <uses-feature android:name="android.hardware.nfc" android:required="false" />
+              <application android:allowBackup="false" android:label="水卡分析器" android:icon="@drawable/ic_water" android:theme="@style/AppTheme" android:supportsRtl="true">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          WCA_FILE_6_END
+          mkdir -p 'app/src/main/res/values'
+          cat > 'app/src/main/res/values/styles.xml' <<'WCA_FILE_7_END'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:windowLightNavigationBar">false</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:windowBackground">#0B1220</item>
+                  <item name="android:colorAccent">#57D6CF</item>
+                  <item name="android:statusBarColor">#0B1220</item>
+                  <item name="android:navigationBarColor">#0B1220</item>
+              </style>
+          </resources>
+          WCA_FILE_7_END
+          mkdir -p 'app/src/main/res/drawable'
+          cat > 'app/src/main/res/drawable/ic_water.xml' <<'WCA_FILE_8_END'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#0B1220" android:pathData="M0,0H108V108H0Z"/>
+              <path android:fillColor="#57D6CF" android:pathData="M54,16C44,34 28,49 28,64A26,26 0,0 0,80 64C80,49 64,34 54,16Z"/>
+              <path android:strokeColor="#0B1220" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M41,65C41,73 46,78 54,79"/>
+              <path android:strokeColor="#C8FAF5" android:strokeWidth="3" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M84,22Q96,32 96,46M78,28Q86,35 86,46"/>
+          </vector>
+          WCA_FILE_8_END
+          mkdir -p 'app/src/main/java/local/watercard/analyzer'
+          cat > 'app/src/main/java/local/watercard/analyzer/DumpImage.java' <<'WCA_FILE_9_END'
+          package local.watercard.analyzer;
+          
+          import java.security.MessageDigest;
+          import java.security.NoSuchAlgorithmException;
+          import java.util.Locale;
+          
+          /** A structural view of a user-selected, assumed contiguous MIFARE Classic 1K image. */
+          public final class DumpImage {
+              public static final int CAPACITY = 1024;
+              public static final int BLOCKS = 64;
+              public static final int BLOCK_SIZE = 16;
+              private final byte[] bytes;
+          
+              public DumpImage(byte[] source) {
+                  if (source == null || source.length == 0 || source.length > CAPACITY) {
+                      throw new IllegalArgumentException("只支持 1–1024 字节的连续 M1 1K BIN 镜像");
+                  }
+                  bytes = source.clone();
+              }
+          
+              public int size() { return bytes.length; }
+              public byte[] copy() { return bytes.clone(); }
+              public int fullBlocks() { return size() / BLOCK_SIZE; }
+              public int partialBytes() { return size() % BLOCK_SIZE; }
+              public int representedBlocks() { return (size() + 15) / 16; }
+              public int absentBlocks() { return BLOCKS - representedBlocks(); }
+              public int available(int index) {
+                  if (index < 0 || index >= BLOCKS) throw new IllegalArgumentException("block");
+                  return Math.max(0, Math.min(BLOCK_SIZE, size() - index * BLOCK_SIZE));
+              }
+              public boolean zero(int index) {
+                  if (available(index) != BLOCK_SIZE) return false;
+                  int start = index * BLOCK_SIZE;
+                  for (int i = start; i < start + BLOCK_SIZE; i++) if (bytes[i] != 0) return false;
+                  return true;
+              }
+              public int zeroBlocks() {
+                  int n = 0;
+                  for (int i = 0; i < BLOCKS; i++) if (zero(i)) n++;
+                  return n;
+              }
+              public static String role(int index) {
+                  if (index == 0) return "厂商信息";
+                  return index % 4 == 3 ? "扇区控制" : "普通数据";
+              }
+              public String status(int index) {
+                  int n = available(index);
+                  if (n == 0) return "未包含";
+                  if (n < BLOCK_SIZE) return "部分字节 (" + n + "/16)";
+                  return zero(index) ? "文件全零" : "文件非零";
+              }
+              public int ordinaryZeroBlocks() {
+                  int n = 0;
+                  for (int i = 1; i < BLOCKS; i++) if (i % 4 != 3 && zero(i)) n++;
+                  return n;
+              }
+              public int ordinaryFullBlocks() {
+                  int n = 0;
+                  for (int i = 1; i < BLOCKS; i++) if (i % 4 != 3 && available(i) == 16) n++;
+                  return n;
+              }
+              private static boolean masked(int block, int offset) {
+                  return block % 4 == 3 && (offset < 6 || offset >= 10);
+              }
+              public String hexLine(int block, int offset) {
+                  if (offset != 0 && offset != 8) throw new IllegalArgumentException("offset");
+                  int n = available(block);
+                  StringBuilder s = new StringBuilder();
+                  for (int i = offset; i < offset + 8; i++) {
+                      if (i != offset) s.append(' ');
+                      if (i >= n) s.append("??");
+                      else if (masked(block, i)) s.append("**");
+                      else s.append(String.format(Locale.ROOT, "%02X", bytes[block * 16 + i] & 255));
+                  }
+                  return s.toString();
+              }
+              public String ascii(int block) {
+                  StringBuilder s = new StringBuilder();
+                  int n = available(block);
+                  for (int i = 0; i < 16; i++) {
+                      if (i >= n) s.append('?');
+                      else if (masked(block, i)) s.append('*');
+                      else {
+                          int v = bytes[block * 16 + i] & 255;
+                          s.append(v >= 32 && v <= 126 ? (char) v : '.');
+                      }
+                  }
+                  return s.toString();
+              }
+              public String summary() {
+                  return String.format(Locale.ROOT,
+                      "%d / 1024 字节 · %.1f%%\n%d 个完整块 · %d 个全零块 · %d 个非零完整块\n%d 个未包含块 · 尾部残缺 %d 字节\n普通数据块：%d/%d 个完整块为零",
+                      size(), 100.0 * size() / CAPACITY, fullBlocks(), zeroBlocks(),
+                      fullBlocks() - zeroBlocks(), absentBlocks(), partialBytes(),
+                      ordinaryZeroBlocks(), ordinaryFullBlocks());
+              }
+              public String sha256() {
+                  try {
+                      byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+                      StringBuilder s = new StringBuilder();
+                      for (byte b : digest) s.append(String.format(Locale.ROOT, "%02x", b & 255));
+                      return s.toString();
+                  } catch (NoSuchAlgorithmException e) { throw new AssertionError(e); }
+              }
+              public static DumpImage demo() {
+                  // Deliberately synthetic; not an authentic card or a usable credential.
+                  byte[] data = new byte[640];
+                  data[0] = 0x11;
+                  for (int block = 3; block < 40; block += 4) data[block * 16 + 9] = 1;
+                  return new DumpImage(data);
+              }
+          }
+          WCA_FILE_9_END
+          mkdir -p 'app/src/main/java/local/watercard/analyzer'
+          cat > 'app/src/main/java/local/watercard/analyzer/MainActivity.java' <<'WCA_FILE_10_END'
+          package local.watercard.analyzer;
+          
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.content.res.ColorStateList;
+          import android.graphics.Typeface;
+          import android.graphics.drawable.GradientDrawable;
+          import android.net.Uri;
+          import android.nfc.NfcAdapter;
+          import android.nfc.Tag;
+          import android.nfc.TagLostException;
+          import android.nfc.tech.MifareClassic;
+          import android.nfc.tech.NfcA;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.provider.Settings;
+          import android.view.WindowInsets;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.ScrollView;
+          import android.widget.TextView;
+          import android.widget.Toast;
+          
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          
+          import java.io.ByteArrayOutputStream;
+          import java.io.IOException;
+          import java.io.InputStream;
+          import java.io.OutputStream;
+          import java.nio.charset.StandardCharsets;
+          import java.text.SimpleDateFormat;
+          import java.util.ArrayList;
+          import java.util.Date;
+          import java.util.Locale;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          
+          public final class MainActivity extends Activity {
+              private static final int BG = 0xFF0B1220, PANEL = 0xFF162235, LINE = 0xFF263950;
+              private static final int WHITE = 0xFFF3F7FC, MUTED = 0xFFACBBCD, ACCENT = 0xFF57D6CF;
+              private static final int WARN = 0xFFFFCD82;
+              private static final int OPEN = 10, SAVE = 11;
+              private final ArrayList<String> logs = new ArrayList<>();
+              private final ExecutorService worker = Executors.newSingleThreadExecutor();
+              private NfcAdapter adapter;
+              private LinearLayout content, tabs;
+              private ScrollView scroll;
+              private TextView subtitle;
+              private Button[] tabButtons;
+              private int page = 0;
+              private DumpImage dump;
+              private String dumpLabel = "", scan = "", readerStatus = "等待启动";
+              private int scans = 0;
+              private boolean readingFile = false;
+              private volatile boolean resumed;
+              private boolean readerEnabled = false;
+          
+              @Override public void onCreate(Bundle saved) {
+                  super.onCreate(saved);
+                  adapter = NfcAdapter.getDefaultAdapter(this);
+                  if (saved != null) {
+                      page = Math.max(0, Math.min(2, saved.getInt("page")));
+                      scan = saved.getString("scan", "");
+                      scans = saved.getInt("scans");
+                      byte[] old = saved.getByteArray("dump");
+                      if (old != null) dump = new DumpImage(old);
+                      dumpLabel = saved.getString("dumpLabel", "");
+                      ArrayList<String> oldLogs = saved.getStringArrayList("logs");
+                      if (oldLogs != null) logs.addAll(oldLogs);
+                  }
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setBackgroundColor(BG);
+                  root.setOnApplyWindowInsetsListener((v, insets) -> {
+                      int left, top, right, bottom;
+                      if (Build.VERSION.SDK_INT >= 30) {
+                          android.graphics.Insets safe = insets.getInsets(
+                              WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                          left = safe.left; top = safe.top; right = safe.right; bottom = safe.bottom;
+                      } else {
+                          left = insets.getSystemWindowInsetLeft(); top = insets.getSystemWindowInsetTop();
+                          right = insets.getSystemWindowInsetRight(); bottom = insets.getSystemWindowInsetBottom();
+                      }
+                      v.setPadding(left + dp(16), top + dp(12), right + dp(16), bottom + dp(8));
+                      return insets;
+                  });
+                  TextView brand = text("水卡分析器", 27, WHITE, true);
+                  root.addView(brand);
+                  subtitle = text("NFC LAB  /  v0.1.0  /  Android " + Build.VERSION.RELEASE
+                      + " · API " + Build.VERSION.SDK_INT, 12, ACCENT, false);
+                  root.addView(subtitle);
+                  tabs = new LinearLayout(this);
+                  tabs.setOrientation(LinearLayout.HORIZONTAL);
+                  LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-1, -2);
+                  tlp.setMargins(0, dp(12), 0, dp(8));
+                  root.addView(tabs, tlp);
+                  String[] titles = {"NFC 扫描", "BIN 镜像", "诊断日志"};
+                  tabButtons = new Button[3];
+                  for (int i = 0; i < titles.length; i++) {
+                      final int target = i;
+                      Button b = button(titles[i], () -> { page = target; render(true); });
+                      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(48), 1);
+                      lp.setMargins(0, 0, i == 2 ? 0 : dp(6), 0);
+                      tabs.addView(b, lp);
+                      tabButtons[i] = b;
+                  }
+                  scroll = new ScrollView(this);
+                  scroll.setFillViewport(true);
+                  content = new LinearLayout(this);
+                  content.setOrientation(LinearLayout.VERTICAL);
+                  scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+                  root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+                  setContentView(root);
+                  root.requestApplyInsets();
+                  if (logs.isEmpty()) addLog("APP_START", "本地只读诊断；API " + Build.VERSION.SDK_INT);
+                  render(true);
+              }
+          
+              @Override protected void onSaveInstanceState(Bundle out) {
+                  super.onSaveInstanceState(out);
+                  out.putInt("page", page);
+                  out.putInt("scans", scans);
+                  out.putString("scan", scan);
+                  out.putString("dumpLabel", dumpLabel);
+                  if (dump != null) out.putByteArray("dump", dump.copy());
+                  out.putStringArrayList("logs", new ArrayList<>(logs));
+              }
+          
+              @Override protected void onResume() {
+                  super.onResume();
+                  resumed = true;
+                  startReader();
+                  render(false);
+              }
+          
+              @Override protected void onPause() {
+                  resumed = false;
+                  if (adapter != null && readerEnabled) {
+                      try { adapter.disableReaderMode(this); }
+                      catch (RuntimeException ignored) { }
+                  }
+                  readerEnabled = false;
+                  super.onPause();
+              }
+          
+              @Override protected void onDestroy() {
+                  worker.shutdownNow();
+                  super.onDestroy();
+              }
+          
+              private void startReader() {
+                  if (adapter == null) {
+                      readerStatus = "设备无 NFC；仍可离线导入 BIN";
+                      addLog("NO_NFC", readerStatus);
+                      return;
+                  }
+                  if (!adapter.isEnabled()) {
+                      readerStatus = "NFC 未开启";
+                      addLog("NFC_OFF", readerStatus);
+                      return;
+                  }
+                  try {
+                      int flags = NfcAdapter.FLAG_READER_NFC_A | NfcAdapter.FLAG_READER_NFC_B
+                          | NfcAdapter.FLAG_READER_NFC_F | NfcAdapter.FLAG_READER_NFC_V
+                          | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK;
+                      adapter.enableReaderMode(this, this::inspectTag, flags, null);
+                      readerEnabled = true;
+                      readerStatus = "等待卡片靠近手机 NFC 感应区";
+                      addLog("READER_READY", "系统 NDEF 探测已跳过；不执行扇区认证");
+                  } catch (RuntimeException e) {
+                      readerStatus = "NFC 启动失败：" + e.getClass().getSimpleName();
+                      addLog("READER_ERROR", readerStatus);
+                  }
+              }
+          
+              private void inspectTag(Tag tag) {
+                  StringBuilder info = new StringBuilder();
+                  info.append("UID：").append(hex(tag.getId())).append('\n');
+                  info.append("技术：").append('\n');
+                  for (String tech : tag.getTechList()) {
+                      info.append("  ").append(tech.substring(tech.lastIndexOf('.') + 1)).append('\n');
+                  }
+                  String code = "TAG_DETECTED", diagnostic = "公开标识读取完成";
+                  NfcA a = NfcA.get(tag);
+                  MifareClassic classic = MifareClassic.get(tag);
+                  if (a != null) {
+                      byte[] atqa = a.getAtqa();
+                      info.append("ATQA 原始字节：").append(hex(atqa)).append('\n');
+                      if (atqa != null && atqa.length == 2)
+                          info.append(String.format(Locale.ROOT, "ATQA (LE)：0x%04X\n",
+                              (atqa[0] & 255) | ((atqa[1] & 255) << 8)));
+                      info.append(String.format(Locale.ROOT, "SAK：0x%02X\n", a.getSak() & 255));
+                  }
+                  if (classic != null) {
+                      info.append("MIFARE Classic 兼容接口：支持\n");
+                      info.append("容量：").append(classic.getSize()).append(" 字节\n");
+                      info.append("扇区：").append(classic.getSectorCount()).append('\n');
+                      info.append("数据块：").append(classic.getBlockCount()).append('\n');
+                  } else {
+                      info.append("MIFARE Classic 专用接口：未枚举\n");
+                  }
+                  if (a != null) {
+                      // Only open/close the public technology connection. No transceive or sector operations.
+                      try {
+                          a.connect();
+                          code = "CONNECT_OK";
+                          diagnostic = "NfcA 连接建立；未执行内存读取";
+                      } catch (TagLostException e) {
+                          code = "TAG_LOST";
+                          diagnostic = "卡片离开或通信中断";
+                      } catch (IOException e) {
+                          code = "IO_ERROR";
+                          diagnostic = "NfcA 连接失败（IOException）";
+                      } catch (RuntimeException e) {
+                          code = "CONNECT_ERROR";
+                          diagnostic = e.getClass().getSimpleName();
+                      } finally {
+                          try { a.close(); } catch (IOException | RuntimeException ignored) { }
+                      }
+                  }
+                  info.append("\n连接诊断：").append(code).append('\n').append(diagnostic);
+                  info.append("\n\n受保护内存：NOT_READ\n未取得发卡方接口；未尝试认证或读取受保护数据。");
+                  final String detail = info.toString();
+                  final String event = code, description = diagnostic;
+                  final String techSummary = classic == null ? "其他或未枚举 Classic" : "Classic, " + classic.getSize() + " B";
+                  runOnUiThread(() -> {
+                      if (isFinishing() || isDestroyed() || !resumed) return;
+                      scan = detail;
+                      scans++;
+                      readerStatus = "已识别卡片 · 第 " + scans + " 次";
+                      addLog(event, techSummary + "；" + description);
+                      if (page == 0 || page == 2) render(false);
+                  });
+              }
+          
+              private static String hex(byte[] bytes) {
+                  if (bytes == null || bytes.length == 0) return "不可用";
+                  StringBuilder result = new StringBuilder();
+                  for (byte b : bytes) {
+                      if (result.length() != 0) result.append(':');
+                      result.append(String.format(Locale.ROOT, "%02X", b & 255));
+                  }
+                  return result.toString();
+              }
+          
+              private void addLog(String code, String message) {
+                  String now = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date());
+                  logs.add(0, now + "  " + code + "\n" + message);
+                  if (logs.size() > 100) logs.remove(logs.size() - 1);
+              }
+          
+              private void render(boolean resetScroll) {
+                  if (content == null) return;
+                  int oldY = resetScroll ? 0 : scroll.getScrollY();
+                  content.removeAllViews();
+                  for (int i = 0; i < tabButtons.length; i++) {
+                      tabButtons[i].setBackgroundTintList(ColorStateList.valueOf(i == page ? ACCENT : PANEL));
+                      tabButtons[i].setTextColor(i == page ? BG : WHITE);
+                  }
+                  if (page == 0) showNfc();
+                  else if (page == 1) showDump();
+                  else showLogs();
+                  scroll.post(() -> scroll.scrollTo(0, oldY));
+              }
+          
+              private void showNfc() {
+                  LinearLayout box = panel();
+                  title(box, "实时 NFC");
+                  label(box, readerStatus, ACCENT, 16);
+                  label(box, "把卡片平贴在手机背面的 NFC 感应区，保持稳定。", MUTED, 14);
+                  action(box, "打开 NFC 设置", () -> {
+                      try { startActivity(new Intent(Settings.ACTION_NFC_SETTINGS)); }
+                      catch (RuntimeException e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+                  });
+                  if (!scan.isEmpty()) {
+                      LinearLayout info = panel();
+                      title(info, "卡片元信息");
+                      TextView value = label(info, scan, WHITE, 14);
+                      value.setTextIsSelectable(true);
+                      value.setTypeface(Typeface.MONOSPACE);
+                  } else {
+                      LinearLayout empty = panel();
+                      title(empty, "尚未扫描");
+                      label(empty, "支持 NFC-A/B/F/V 卡片发现；Classic 容量等信息取决于手机硬件。", MUTED, 14);
+                  }
+                  LinearLayout note = panel();
+                  title(note, "读取边界");
+                  label(note, "本页读取公开的卡片发现元信息，诊断 NFC 连接，不会尝试密钥、发出存储命令或修改卡片。受保护业务数据可使用发卡方授权导出的文件在 BIN 页查看。", MUTED, 14);
+              }
+          
+              private void showDump() {
+                  LinearLayout intro = panel();
+                  title(intro, "MIFARE Classic 1K 镜像");
+                  label(intro, "导入 1–1024 字节的连续原始 BIN。仅假设按地址顺序；不自动补零，不将文件内容等同于实体卡读成功。", MUTED, 14);
+                  action(intro, readingFile ? "正在读取文件…" : "选择 BIN 文件", () -> {
+                      if (!readingFile) openFile();
+                  });
+                  action(intro, "载入合成演示镜像", () -> {
+                      if (readingFile) return;
+                      dump = DumpImage.demo();
+                      dumpLabel = "合成演示（非实体卡）";
+                      addLog("DEMO_LOAD", "640 字节");
+                      render(true);
+                  });
+                  if (dump == null) return;
+                  LinearLayout summary = panel();
+                  title(summary, dumpLabel);
+                  label(summary, dump.summary(), WHITE, 15);
+                  label(summary, "?? = 未提供的字节；** = 已遮蔽的控制块敏感字段。", WARN, 13);
+                  label(summary, "文件全零不等于实体卡全零；文件非零不代表已验证真实来源。", MUTED, 13);
+                  action(summary, "导出脱敏 JSON 诊断报告", this::chooseSave);
+                  for (int sector = 0; sector < 16; sector++) {
+                      LinearLayout s = panel();
+                      int full = 0;
+                      for (int j = 0; j < 4; j++) if (dump.available(sector * 4 + j) == 16) full++;
+                      title(s, String.format(Locale.ROOT, "扇区 %02d  ·  %d/4 完整块", sector, full));
+                      for (int j = 0; j < 4; j++) {
+                          int index = sector * 4 + j;
+                          TextView row = label(s, String.format(Locale.ROOT, "Block %02d  |  %s  |  %s",
+                              index, DumpImage.role(index), dump.status(index)),
+                              dump.available(index) == 0 ? MUTED : (dump.available(index) < 16 ? WARN : ACCENT), 13);
+                          row.setPadding(0, dp(7), 0, dp(2));
+                          if (dump.available(index) != 0) {
+                              TextView bytes = label(s, dump.hexLine(index, 0) + "\n" + dump.hexLine(index, 8)
+                                  + "\nASCII " + dump.ascii(index), WHITE, 13);
+                              bytes.setTypeface(Typeface.MONOSPACE);
+                              bytes.setTextIsSelectable(true);
+                          }
+                      }
+                  }
+              }
+          
+              private void showLogs() {
+                  LinearLayout header = panel();
+                  title(header, "本次会话 · " + logs.size() + " 条");
+                  label(header, "记录 NFC 发现、连接异常和镜像导入状态，不保存完整 UID、密钥或原始卡片数据。", MUTED, 14);
+                  action(header, "导出脱敏 JSON 诊断报告", this::chooseSave);
+                  action(header, "清空日志", () -> { logs.clear(); render(true); });
+                  for (String log : logs) {
+                      LinearLayout p = panel();
+                      TextView t = label(p, log, WHITE, 13);
+                      t.setTextIsSelectable(true);
+                  }
+              }
+          
+              private void openFile() {
+                  Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                  i.setType("*/*");
+                  i.addCategory(Intent.CATEGORY_OPENABLE);
+                  try { startActivityForResult(i, OPEN); }
+                  catch (RuntimeException e) { toast("无法打开文件选择器"); }
+              }
+          
+              private void chooseSave() {
+                  Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                  i.setType("application/json");
+                  i.addCategory(Intent.CATEGORY_OPENABLE);
+                  i.putExtra(Intent.EXTRA_TITLE, "watercard-diagnostics.json");
+                  try { startActivityForResult(i, SAVE); }
+                  catch (RuntimeException e) { toast("无法打开保存界面"); }
+              }
+          
+              @Override protected void onActivityResult(int request, int result, Intent data) {
+                  super.onActivityResult(request, result, data);
+                  if (result != RESULT_OK || data == null || data.getData() == null) return;
+                  Uri uri = data.getData();
+                  if (request == OPEN && !readingFile) {
+                      readingFile = true;
+                      render(false);
+                      worker.execute(() -> {
+                          try (InputStream input = getContentResolver().openInputStream(uri)) {
+                              if (input == null) throw new IOException("无法打开文件");
+                              ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                              byte[] chunk = new byte[256];
+                              int count;
+                              while ((count = input.read(chunk)) != -1) {
+                                  if (buffer.size() + count > DumpImage.CAPACITY)
+                                      throw new IOException("超过 1024 字节，不是受支持的连续 1K BIN");
+                                  buffer.write(chunk, 0, count);
+                              }
+                              DumpImage image = new DumpImage(buffer.toByteArray());
+                              runOnUiThread(() -> {
+                                  if (isDestroyed()) return;
+                                  dump = image;
+                                  dumpLabel = "导入的 BIN 镜像";
+                                  readingFile = false;
+                                  addLog("BIN_IMPORTED", image.size() + " B；完整块 " + image.fullBlocks()
+                                      + "；未包含块 " + image.absentBlocks());
+                                  render(true);
+                              });
+                          } catch (Exception e) {
+                              final String reason = e.getClass().getSimpleName();
+                              runOnUiThread(() -> {
+                                  if (isDestroyed()) return;
+                                  readingFile = false;
+                                  addLog("BIN_ERROR", reason);
+                                  toast("导入失败：请检查文件是否为 1–1024 字节的 BIN");
+                                  render(false);
+                              });
+                          }
+                      });
+                  } else if (request == SAVE) {
+                      final byte[] report;
+                      try { report = makeReport().getBytes(StandardCharsets.UTF_8); }
+                      catch (Exception e) { toast("报告生成失败"); return; }
+                      worker.execute(() -> {
+                          try (OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
+                              if (out == null) throw new IOException("无法打开输出");
+                              out.write(report);
+                              out.flush();
+                          } catch (Exception e) {
+                              runOnUiThread(() -> {
+                                  if (!isDestroyed()) { addLog("EXPORT_ERROR", e.getClass().getSimpleName()); toast("报告保存失败"); render(false); }
+                              });
+                              return;
+                          }
+                          runOnUiThread(() -> {
+                              if (!isDestroyed()) { addLog("REPORT_SAVED", "脱敏 JSON"); toast("报告已保存"); render(false); }
+                          });
+                      });
+                  }
+              }
+          
+              private String makeReport() throws Exception {
+                  JSONObject root = new JSONObject();
+                  root.put("schema", "watercard-diagnostics-1");
+                  root.put("appVersion", "0.1.0");
+                  root.put("androidApi", Build.VERSION.SDK_INT);
+                  root.put("scope", "public NFC metadata/connection; offline contiguous BIN structure");
+                  root.put("protectedMemoryRead", false);
+                  root.put("scanCount", scans);
+                  JSONArray events = new JSONArray();
+                  for (String log : logs) events.put(log);
+                  root.put("events", events);
+                  if (dump != null) {
+                      JSONObject image = new JSONObject();
+                      image.put("assumption", "contiguous MIFARE Classic 1K; source not verified");
+                      image.put("bytes", dump.size());
+                      image.put("completeBlocks", dump.fullBlocks());
+                      image.put("zeroCompleteBlocks", dump.zeroBlocks());
+                      image.put("absentBlocks", dump.absentBlocks());
+                      image.put("partialBytes", dump.partialBytes());
+                      image.put("syntheticDemo", dumpLabel.startsWith("合成"));
+                      JSONArray blocks = new JSONArray();
+                      for (int i = 0; i < 64; i++) {
+                          JSONObject b = new JSONObject();
+                          b.put("sector", i / 4);
+                          b.put("block", i);
+                          b.put("fileBytes", dump.available(i));
+                          b.put("role", DumpImage.role(i));
+                          b.put("fileStatus", dump.status(i));
+                          b.put("physicalReadStatus", "UNKNOWN");
+                          blocks.put(b);
+                      }
+                      image.put("blocks", blocks);
+                      root.put("image", image);
+                  }
+                  return root.toString(2);
+              }
+          
+              private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+              private TextView text(String value, int size, int color, boolean bold) {
+                  TextView t = new TextView(this);
+                  t.setText(value);
+                  t.setTextColor(color);
+                  t.setTextSize(size);
+                  t.setLineSpacing(dp(2), 1f);
+                  if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                  return t;
+              }
+              private GradientDrawable background(int color, int radius) {
+                  GradientDrawable d = new GradientDrawable();
+                  d.setColor(color);
+                  d.setCornerRadius(dp(radius));
+                  return d;
+              }
+              private LinearLayout panel() {
+                  LinearLayout p = new LinearLayout(this);
+                  p.setOrientation(LinearLayout.VERTICAL);
+                  GradientDrawable bg = background(PANEL, 16);
+                  bg.setStroke(dp(1), LINE);
+                  p.setBackground(bg);
+                  p.setPadding(dp(14), dp(13), dp(14), dp(13));
+                  LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+                  lp.setMargins(0, 0, 0, dp(10));
+                  content.addView(p, lp);
+                  return p;
+              }
+              private void title(LinearLayout p, String value) {
+                  TextView t = text(value, 18, WHITE, true);
+                  t.setPadding(0, 0, 0, dp(7));
+                  p.addView(t);
+              }
+              private TextView label(LinearLayout p, String value, int color, int size) {
+                  TextView t = text(value, size, color, false);
+                  t.setPadding(0, 0, 0, dp(7));
+                  p.addView(t, new LinearLayout.LayoutParams(-1, -2));
+                  return t;
+              }
+              private Button button(String value, Runnable onClick) {
+                  Button b = new Button(this);
+                  b.setText(value);
+                  b.setAllCaps(false);
+                  b.setTextSize(13);
+                  b.setTextColor(WHITE);
+                  b.setMinHeight(dp(48));
+                  b.setPadding(dp(5), 0, dp(5), 0);
+                  b.setBackgroundTintList(ColorStateList.valueOf(LINE));
+                  b.setOnClickListener(v -> onClick.run());
+                  return b;
+              }
+              private void action(LinearLayout p, String value, Runnable onClick) {
+                  Button b = button(value, onClick);
+                  p.addView(b, new LinearLayout.LayoutParams(-1, -2));
+              }
+              private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show(); }
+          }
+          WCA_FILE_10_END
+          mkdir -p 'tests'
+          cat > 'tests/DumpImageTest.java' <<'WCA_FILE_11_END'
+          import local.watercard.analyzer.DumpImage;
+          
+          public final class DumpImageTest {
+              private static void check(boolean condition, String message) {
+                  if (!condition) throw new AssertionError(message);
+              }
+              public static void main(String[] args) {
+                  DumpImage d = DumpImage.demo();
+                  check(d.size() == 640 && d.fullBlocks() == 40, "640 B");
+                  check(d.absentBlocks() == 24 && d.zeroBlocks() == 29, "missing/zero");
+                  check(d.ordinaryZeroBlocks() == 29 && d.ordinaryFullBlocks() == 29, "ordinary blocks");
+                  check(d.status(40).equals("未包含"), "missing block");
+                  check(d.hexLine(3, 0).startsWith("** ** ** ** ** **"), "redaction");
+                  check(d.hexLine(3, 8).endsWith("** ** ** ** ** **"), "redaction end");
+                  DumpImage incomplete = new DumpImage(new byte[17]);
+                  check(incomplete.fullBlocks() == 1 && incomplete.partialBytes() == 1, "partial");
+                  check(incomplete.available(1) == 1 && !incomplete.zero(1), "partial is not zero");
+                  check(incomplete.hexLine(1, 0).equals("00 ?? ?? ?? ?? ?? ?? ??"), "unknown bytes");
+                  check(incomplete.absentBlocks() == 62, "absent partial");
+                  check(new DumpImage(new byte[1024]).zeroBlocks() == 64, "full");
+                  for (int size : new int[] {0, 1025}) {
+                      boolean rejected = false;
+                      try { new DumpImage(new byte[size]); }
+                      catch (IllegalArgumentException expected) { rejected = true; }
+                      check(rejected, "invalid size " + size);
+                  }
+                  byte[] b = new byte[16];
+                  DumpImage copied = new DumpImage(b);
+                  b[0] = 9;
+                  check(copied.zero(0), "defensive copy");
+                  check(copied.sha256().length() == 64, "hash");
+                  System.out.println("DumpImage tests: PASS");
+              }
+          }
+          WCA_FILE_11_END
+          mkdir -p '.'
+          cat > 'build-apk.sh' <<'WCA_FILE_12_END'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cd "$(dirname "$0")"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "$SDK" ]]; then echo "Set ANDROID_SDK_ROOT or ANDROID_HOME" >&2; exit 1; fi
+          BT="$SDK/build-tools/36.0.0"
+          API="$SDK/platforms/android-36/android.jar"
+          if [[ ! -f "$API" || ! -x "$BT/aapt2" ]]; then echo "Install platforms;android-36 and build-tools;36.0.0" >&2; exit 1; fi
+          rm -rf build
+          mkdir -p build/classes build/generated build/dex build/tests
+          javac -encoding UTF-8 --release 8 -d build/tests app/src/main/java/local/watercard/analyzer/DumpImage.java tests/DumpImageTest.java
+          java -cp build/tests DumpImageTest
+          "$BT/aapt2" compile --dir app/src/main/res -o build/res.zip
+          "$BT/aapt2" link -I "$API" --manifest app/src/main/AndroidManifest.xml --java build/generated \
+            --min-sdk-version 26 --target-sdk-version 36 --version-code 1 --version-name 0.1.0 \
+            -o build/unsigned.apk build/res.zip
+          find app/src/main/java build/generated -name '*.java' -print0 | xargs -0 javac -encoding UTF-8 --release 8 -classpath "$API" -d build/classes
+          jar cf build/classes.jar -C build/classes .
+          "$BT/d8" --lib "$API" --min-api 26 --output build/dex build/classes.jar
+          zip -q -j build/unsigned.apk build/dex/classes.dex
+          "$BT/zipalign" -f 4 build/unsigned.apk build/aligned.apk
+          keytool -genkeypair -keystore build/debug.keystore -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storetype JKS \
+            -dname "CN=WaterCard Debug,O=Local Development,C=US" >/dev/null
+          "$BT/apksigner" sign --ks build/debug.keystore --ks-pass pass:android --key-pass pass:android \
+            --out build/WaterCardAnalyzer-v0.1.0-debug.apk build/aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs build/WaterCardAnalyzer-v0.1.0-debug.apk
+          "$BT/aapt2" dump badging build/WaterCardAnalyzer-v0.1.0-debug.apk
+          WCA_FILE_12_END
+          mkdir -p '.'
+          cat > 'README.md' <<'WCA_FILE_13_END'
+          # 水卡分析器 / WaterCardAnalyzer 0.1.0
+          
+          适配 Android 16 / API 36，最低 Android 8.0 (API 26)。Java 8 + 原生 Android View，无第三方运行库、无 Root、无 INTERNET 权限。支持离线模式。
+          
+          ## 功能
+          - NFC 前台扫描：UID、技术列表、ATQA/SAK、Classic 容量/扇区/块数。系统 NDEF 检查被主动跳过；只进行公开技术连接诊断，不调用认证、扇区读取、原始命令或写入。CONNECT_OK 仅表示建立连接。
+          - 通过系统文件选择器导入连续 MIFARE Classic 1K 原始 BIN，支持 1–1024 字节（包括部分块）。按 16 字节划分 64 块，区分未包含、文件全零、文件非零和部分字节；未包含的字节用 ?? 标记。扇区控制块的敏感字段遮蔽。不能由长度或零值确定实体卡读取状态。
+          - 640 字节合成演示文件，完全不含用户真实水卡数据。
+          - 会话日志（最近 100 条），支持导出脱敏 JSON 报告。报告不包含原始字节、UID 或认证凭据。无后台采集。
+          - Android 16 强制 edge-to-edge 下应用系统栏及屏幕刘海安全区。
+          
+          ## 运行
+          打开 NFC，启动 APP，靠近卡片查看连接诊断。进入 BIN 镜像页选择已有的合法导出文件；日志页可导出诊断报告。受保护数据需要发卡方提供的授权接口或导出文件，本版不尝试读取或推断水卡余额。
+          
+          ## 构建
+          JDK 17 或 21，Android SDK Platform 36，Build Tools 36.0.0。在 Android Studio 打开本目录（AGP 8.10.1 / Gradle 8.11.1），同步后 Build APK(s)；也可使用已安装的 Gradle 8.11.1 执行 gradle :app:assembleDebug。
+          无需 Gradle 的 Linux 构建路径：配置 ANDROID_SDK_ROOT 或 ANDROID_HOME，安装 zip，然后执行 bash build-apk.sh。构建脚本执行纯 Java 测试、编译、DEX、资源链接、签名与验证。每次使用临时调试密钥，重新构建的 APK 签名不一定与之前相同。
+          
+          ## 测试与限制
+          tests/DumpImageTest.java 是纯 Java 自检，覆盖部分镜像、全零、非零、缺失、边界长度和敏感字段遮蔽。不含真实水卡或真实密钥。实体 NFC、不同机型兼容性和实际安装仍需用户在 Android 16 上验证。仅支持假定连续 1K 的原始 BIN，不自动识别其他软件的容器格式；无余额或消费记录解码。
+          WCA_FILE_13_END
+      - name: SDK 36 and formatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$ANDROID_HOME/platforms/android-36/android.jar" || ! -x "$ANDROID_HOME/build-tools/36.0.0/aapt2" ]]; then
+            yes | sdkmanager --licenses >/dev/null || true
+            sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          fi
+          if curl -fsSL --retry 2 --max-time 45 https://github.com/google/google-java-format/releases/download/v1.25.2/google-java-format-1.25.2-all-deps.jar -o /tmp/google-java-format.jar; then
+            find project -name '*.java' -print0 | xargs -0 java -jar /tmp/google-java-format.jar --replace
+          else
+            echo "Formatter unavailable; retain readable source formatting."
+          fi
+      - name: Build and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+          bash project/build-apk.sh 2>&1 | tee delivery/build-report.txt
+          cp project/build/WaterCardAnalyzer-v0.1.0-debug.apk delivery/
+          (cd project && zip -qr ../delivery/WaterCardAnalyzer-source.zip . -x 'build/*' '.gradle/*' '*/build/*')
+          (cd delivery && sha256sum WaterCardAnalyzer-v0.1.0-debug.apk WaterCardAnalyzer-source.zip build-report.txt > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watercard-analyzer-v010
+          path: delivery/
+          retention-days: 1
+          if-no-files-found: error
